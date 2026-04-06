@@ -1,17 +1,29 @@
-# Step 1: Use Java 17 JDK image
-FROM eclipse-temurin:17-jdk
+# Step 1: Use a Maven + JDK image to build the app
+FROM maven:3.9.3-eclipse-temurin-17 AS build
 
-# Step 2: Set working directory inside container
+# Set working directory inside container
 WORKDIR /app
 
-# Step 3: Copy all project files into container
-COPY . .
+# Copy Maven files first to cache dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline
 
-# Step 4: Install Maven wrapper if it exists, otherwise install Maven
-RUN apt-get update && apt-get install -y maven
+# Copy the rest of the project
+COPY src ./src
 
-# Step 5: Build the Spring Boot app
+# Build the Spring Boot app (skip tests to speed up)
 RUN mvn clean package -DskipTests
 
-# Step 6: Run the app
-CMD ["java", "-jar", "target/eccomercesspringboot-0.0.1-SNAPSHOT.jar"]
+# Step 2: Use a smaller JDK image for running the app
+FROM eclipse-temurin:17-jdk
+
+WORKDIR /app
+
+# Copy the built jar from the build stage
+COPY --from=build /app/target/eccomercesspringboot-0.0.1-SNAPSHOT.jar app.jar
+
+# Expose port 8080
+EXPOSE 8080
+
+# Run the Spring Boot app
+ENTRYPOINT ["java","-jar","app.jar"]
